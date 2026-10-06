@@ -6,21 +6,27 @@
     <meta name="theme-color" content="#f4f6fb" />
     <meta
       name="description"
-      content="Voxly AI turns your text into speech with a simple, local Python app."
+      content="Voxly AI turns your text into speech with a simple Python app."
     />
     <title>Voxly AI — Text to Speech</title>
-    <link rel="stylesheet" href="static/css/style.css" />
-    <script src="static/js/script.js" defer></script>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <script
+      src="{{ url_for('static', filename='js/script.js') }}"
+      defer
+    ></script>
   </head>
   <body>
     <main class="page-shell">
       <header class="topbar">
-        <a class="brand" href="./" aria-label="Voxly AI home">
+        <a class="brand" href="{{ url_for('index') }}" aria-label="Voxly AI home">
           <span class="brand-mark" aria-hidden="true">v</span>
           <span>voxly<span class="brand-accent">ai</span></span>
         </a>
         <span class="local-badge"
-          ><span aria-hidden="true"></span> Runs locally</span
+          ><span aria-hidden="true"></span> Server powered</span
         >
       </header>
 

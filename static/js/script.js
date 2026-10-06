@@ -14,8 +14,9 @@ const volumeValue = document.querySelector('#volume-value');
 const statusLine = document.querySelector('.status-line');
 const statusMessage = document.querySelector('#status-message');
 
-let voices = [];
-let isSpeaking = false;
+let requestController = null;
+let currentAudio = null;
+let currentAudioUrl = null;
 
 function setStatus(message, state = '') {
   statusMessage.textContent = message;
@@ -30,7 +31,6 @@ function updateCharacterCount() {
   const count = Array.from(textInput.value).length;
 
   characterCurrent.textContent = count;
-
   characterCount.setAttribute(
     'aria-label',
     `${count} of ${MAX_CHARACTERS} characters`,
@@ -38,47 +38,54 @@ function updateCharacterCount() {
 }
 
 function setBusy(isBusy) {
-  isSpeaking = isBusy;
   speakButton.disabled = isBusy;
   stopButton.disabled = !isBusy;
 }
 
-function loadVoices() {
-  if (!('speechSynthesis' in window)) {
-    voiceSelect.replaceChildren(new Option('Speech not supported', ''));
-    voiceSelect.disabled = true;
-
-    setStatus('Speech synthesis is not supported on this browser.', 'error');
-
-    return;
+function releaseAudio() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.removeAttribute('src');
+    currentAudio = null;
   }
 
-  voices = window.speechSynthesis.getVoices();
-
-  voiceSelect.replaceChildren();
-
-  if (voices.length === 0) {
-    voiceSelect.add(new Option('Loading voices...', ''));
-    return;
+  if (currentAudioUrl) {
+    URL.revokeObjectURL(currentAudioUrl);
+    currentAudioUrl = null;
   }
-
-  voices.forEach((voice, index) => {
-    const option = new Option(`${voice.name} (${voice.lang})`, index);
-
-    voiceSelect.add(option);
-  });
-
-  voiceSelect.disabled = false;
 }
 
-function getSpeechRate() {
-  const wpm = Number(speedSlider.value);
+async function loadVoices() {
+  voiceSelect.disabled = true;
 
-  // Convert 100-250 WPM into a natural speechSynthesis rate.
-  return 0.6 + ((wpm - 100) / 150) * 0.9;
+  try {
+    const response = await fetch('/voices');
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || 'Voice settings are unavailable.');
+    }
+
+    voiceSelect.replaceChildren();
+
+    if (result.voices.length === 0) {
+      voiceSelect.add(new Option('No voices available', ''));
+      return;
+    }
+
+    result.voices.forEach((voice) => {
+      voiceSelect.add(new Option(voice.name, voice.id));
+    });
+  } catch (error) {
+    voiceSelect.replaceChildren(new Option('Voices unavailable', ''));
+    setStatus(error.message || 'Voice settings are unavailable.', 'error');
+  } finally {
+    voiceSelect.disabled = voiceSelect.options.length === 0
+      || voiceSelect.options[0].value === '';
+  }
 }
 
-function speak() {
+async function speak() {
   const text = textInput.value;
   const characterLength = Array.from(text).length;
 
@@ -93,61 +100,67 @@ function speak() {
     return;
   }
 
-  if (!('speechSynthesis' in window)) {
-    setStatus('Speech synthesis is not supported on this browser.', 'error');
-    return;
-  }
+  releaseAudio();
+  requestController = new AbortController();
+  setBusy(true);
+  setStatus('Generating speech...', 'speaking');
 
-  // Stop any previous speech.
-  window.speechSynthesis.cancel();
+  try {
+    const response = await fetch('/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        voice: voiceSelect.value || null,
+        rate: Number(speedSlider.value),
+      }),
+      signal: requestController.signal,
+    });
 
-  const utterance = new SpeechSynthesisUtterance(text);
+    if (!response.ok) {
+      const result = await response.json();
+      throw new Error(result.message || 'Speech could not be generated.');
+    }
 
-  // Selected voice.
-  const selectedIndex = Number(voiceSelect.value);
+    const audioBlob = await response.blob();
+    currentAudioUrl = URL.createObjectURL(audioBlob);
+    currentAudio = new Audio(currentAudioUrl);
+    currentAudio.volume = Number(volumeSlider.value) / 100;
+    currentAudio.onended = () => {
+      releaseAudio();
+      requestController = null;
+      setBusy(false);
+      setStatus('Finished', 'finished');
+    };
+    currentAudio.onerror = () => {
+      releaseAudio();
+      requestController = null;
+      setBusy(false);
+      setStatus('Speech playback failed. Please try again.', 'error');
+    };
 
-  if (!Number.isNaN(selectedIndex) && voices[selectedIndex]) {
-    utterance.voice = voices[selectedIndex];
-  }
-
-  // Speech speed.
-  utterance.rate = getSpeechRate();
-
-  // Volume.
-  utterance.volume = Number(volumeSlider.value) / 100;
-
-  utterance.pitch = 1;
-
-  utterance.onstart = () => {
-    setBusy(true);
     setStatus('Speaking...', 'speaking');
-  };
-
-  utterance.onend = () => {
+    await currentAudio.play();
+  } catch (error) {
+    releaseAudio();
+    requestController = null;
     setBusy(false);
-    setStatus('Finished', 'finished');
-  };
 
-  utterance.onerror = (event) => {
-    if (event.error === 'canceled' || event.error === 'interrupted') {
+    if (error.name === 'AbortError') {
       return;
     }
 
-    setBusy(false);
-    setStatus('Speech playback failed. Please try again.', 'error');
-  };
-
-  setBusy(true);
-  setStatus('Speaking...', 'speaking');
-
-  window.speechSynthesis.speak(utterance);
+    setStatus(error.message || 'Speech could not be generated. Please try again.', 'error');
+  }
 }
 
 function stop() {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+  if (requestController) {
+    requestController.abort();
+    requestController = null;
   }
 
+  releaseAudio();
   setBusy(false);
   setStatus('Stopped');
 }
@@ -167,21 +180,13 @@ textInput.addEventListener('input', () => {
 });
 
 speakButton.addEventListener('click', speak);
-
 stopButton.addEventListener('click', stop);
 
 clearButton.addEventListener('click', () => {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-  }
-
+  stop();
   textInput.value = '';
-
   updateCharacterCount();
-
-  setBusy(false);
   setStatus('Ready to speak');
-
   textInput.focus();
 });
 
@@ -191,11 +196,11 @@ speedSlider.addEventListener('input', () => {
 
 volumeSlider.addEventListener('input', () => {
   volumeValue.textContent = `${volumeSlider.value}%`;
-});
 
-if ('speechSynthesis' in window) {
-  window.speechSynthesis.onvoiceschanged = loadVoices;
-}
+  if (currentAudio) {
+    currentAudio.volume = Number(volumeSlider.value) / 100;
+  }
+});
 
 updateCharacterCount();
 loadVoices();

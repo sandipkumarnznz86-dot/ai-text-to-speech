@@ -1,58 +1,17 @@
 # Voxly AI
 
-Voxly AI is a simple Python-based text-to-speech assistant that converts user-entered text into spoken audio.
+Voxly AI is a Python Flask text-to-speech app. It uses the speech engine installed on the server to generate audio and sends the audio to the browser for playback.
 
 ## Features
 
-- Text-to-speech
-- Simple modern interface
-- Speech controls
-- Voice settings
-- Character counter
-- Responsive design
-- No login required
-- No database required
-- Easy to run locally
+- Text-to-speech with server-installed voices
+- Voice, speech speed, and playback volume controls
+- Character counter and responsive interface
+- No login or database required
 
-## Technologies
+## Run locally
 
-- Python
-- Flask
-- pyttsx3
-- HTML5
-- CSS3
-- JavaScript
-
-## Project Structure
-
-```text
-voxly-ai/
-├── app.py
-├── requirements.txt
-├── README.md
-├── LICENSE
-├── .gitignore
-├── templates/
-│   └── index.html
-├── static/
-│   ├── css/
-│   │   └── style.css
-│   └── js/
-│       └── script.js
-└── screenshots/
-    └── voxly-ai.png  (add your screenshot here)
-```
-
-## Installation
-
-Clone the repository and enter its folder:
-
-```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
-cd voxly-ai
-```
-
-Create and activate a virtual environment:
+Requirements: Python 3.10 or newer and a speech engine supported by `pyttsx3`.
 
 ```bash
 python -m venv venv
@@ -70,56 +29,35 @@ On macOS or Linux:
 source venv/bin/activate
 ```
 
-Install the dependencies:
+Install the Python dependencies and run the app:
 
 ```bash
 pip install -r requirements.txt
-```
-
-## Run the Application
-
-Start the local Flask server:
-
-```bash
 python app.py
 ```
 
-Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
+Open <http://127.0.0.1:5000>. To use another port, set the `PORT` environment variable before starting the app.
 
-Voxly uses the voices available on the computer running the Flask server. The generated audio is sent to the browser for playback. The first request may take a moment while the local speech engine initializes.
+## Deploy publicly on Render
 
-## How It Works
+GitHub Pages only hosts static files and cannot run Flask or Python. Deploy Voxly as a Render web service instead; the included `render.yaml` and `Dockerfile` configure the service and install eSpeak NG, which `pyttsx3` needs on Linux.
 
-```text
-User enters text
-       ↓
-Frontend sends text
-       ↓
-Flask backend
-       ↓
-Python Text-to-Speech
-       ↓
-Speech generated
-       ↓
-User hears the text
-```
+1. Push this repository to GitHub.
+2. Sign in to [Render](https://render.com/) and choose **New > Blueprint**.
+3. Connect `sandipkumarnznz86-dot/ai-text-to-speech` and apply the blueprint.
+4. Wait for the Docker build and deployment to finish. Render will assign the service a public `onrender.com` URL; open that URL to use Voxly AI.
 
-## Screenshot
+You can also start from [Render's Blueprint deployment page](https://render.com/deploy?repo=https://github.com/sandipkumarnznz86-dot/ai-text-to-speech).
 
-![Voxly AI Screenshot](screenshots/voxly-ai.png)
+The deployment runs Gunicorn bound to `0.0.0.0` on the `PORT` provided by Render. The page and assets are served by Flask, and the browser calls the Flask `/voices` and `/speak` routes. Speech is generated on the server, so the available voices depend on the speech engine installed in the deployment container.
 
-Add a screenshot at `screenshots/voxly-ai.png` when one is ready.
+## Routes
 
-## Future Improvements
-
-- Multiple languages
-- More voice options
-- Better voice controls
-- Download generated audio
-- AI-generated responses
-- Voice input
-- Conversation mode
+- `GET /` — application page
+- `GET /voices` — server speech voices as JSON
+- `POST /speak` — generate WAV audio from JSON text, voice, and rate
+- `GET /health` — deployment health check
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

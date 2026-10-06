@@ -5,7 +5,7 @@ import threading
 from io import BytesIO
 
 import pyttsx3
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file, url_for
 
 
 app = Flask(__name__)
@@ -33,6 +33,11 @@ def get_voices():
 @app.get("/")
 def index():
     return render_template("index.html")
+
+
+@app.get("/health")
+def health():
+    return jsonify({"success": True})
 
 
 @app.errorhandler(413)
@@ -102,4 +107,8 @@ def speak():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "5000")),
+        debug=False,
+    )
